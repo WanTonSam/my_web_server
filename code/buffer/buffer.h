@@ -43,9 +43,9 @@ private:
     const char* BeginPtr_() const;
     void MakeSpace_(size_t len);
 
-    std::vector<char> buffer_;
-    std::atomic<std::size_t> readPos_;
-    std::atomic<std::size_t> writePos_;
+    std::vector<char> buffer_;  //动态数组，用作实际存储缓冲区的数据。
+    std::atomic<std::size_t> readPos_;  //原子变量，表示当前读取位置的索引。
+    std::atomic<std::size_t> writePos_; //原子变量，表示当前写入位置的索引。
 };
 
 #endif

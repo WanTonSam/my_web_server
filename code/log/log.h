@@ -46,14 +46,14 @@ private:
 
     bool isOpen_;
 
-    Buffer buff_;
+    Buffer buff_;   // 缓冲区
     int level_;
     bool isAsync_;
 
     FILE* fp_;
-    std::unique_ptr<BlockDeque<std::string>> deque_;
-    std::unique_ptr<std::thread> writeThread_;
-    std::mutex mtx_;
+    std::unique_ptr<BlockDeque<std::string>> deque_;    // 阻塞队列
+    std::unique_ptr<std::thread> writeThread_;          // 写线程
+    std::mutex mtx_;                                     // 互斥锁
 };
 
 #define LOG_BASE(level, format, ...) \
@@ -64,7 +64,8 @@ private:
             log->flush();\
         }\
     }while (0);
-
+    
+// 不同等级的日志记录宏
 #define LOG_DEBUG(format, ...) do {LOG_BASE(0, format, ##__VA_ARGS__)} while (0);
 #define LOG_INFO(format, ...) do {LOG_BASE(1, format, ##__VA_ARGS__)} while(0);
 #define LOG_WARN(format, ...) do {LOG_BASE(2, format, ##__VA_ARGS__)} while(0);

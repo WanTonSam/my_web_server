@@ -13,44 +13,44 @@ public:
 
     ~BlockDeque();
 
-    void clear();
+    void clear();// 清空队列
 
-    bool empty();
+    bool empty();// 检查队列是否为空
 
-    bool full();
+    bool full();// 检查队列是否已满
 
-    void Close();
+    void Close(); // 关闭队列，并通知所有等待的线程
 
-    size_t size();
+    size_t size(); // 返回队列当前的大小
 
-    size_t capacity();
+    size_t capacity();// 返回队列的容量
 
-    T front();
+    T front(); // 返回队列前端的元素
 
-    T back();
+    T back();   // 返回队列后端的元素
 
-    void push_back(const T& item);
+    void push_back(const T& item);// 在队列后端添加元素
 
-    void push_front(const T& item);
+    void push_front(const T& item);// 在队列前端添加元素
 
-    bool pop(T &item);
+    bool pop(T &item);// 从队列前端移除元素
 
-    bool pop(T &item, int timeout);
+    bool pop(T &item, int timeout);// 具有超时机制的从队列前端移除元素
 
-    void flush();
+    void flush();// 唤醒一个等待的消费者线程
 
 private:
-    std::deque<T> deq_;
+    std::deque<T> deq_;// 底层双端队列，用于存储元素
 
-    size_t capacity_;
+    size_t capacity_;// 队列的最大容量
 
-    std::mutex mtx_;
+    std::mutex mtx_; // 互斥锁，保证线程安全
 
-    bool isClose_;
+    bool isClose_;// 标志队列是否已经关闭
 
-    std::condition_variable condConsumer_;
+    std::condition_variable condConsumer_;// 消费者条件变量
     
-    std::condition_variable condProducer_;
+    std::condition_variable condProducer_;// 生产者条件变量
 
 };
 

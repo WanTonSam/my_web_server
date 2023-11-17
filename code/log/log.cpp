@@ -14,33 +14,33 @@ Log::Log() {
 Log::~Log() {
     if (writeThread_ && writeThread_->joinable()) {
         while (!deque_->empty()) {
-            deque_->flush();
+            deque_->flush();    // 等待队列清空
         }
-        deque_->Close();
-        writeThread_->join();
+        deque_->Close();        // 关闭队列
+        writeThread_->join();   // 等待写线程结束
     }
     if (fp_) {
         lock_guard<mutex> locker(mtx_);
-        flush();
+        flush();    // 刷新缓冲区
         fclose(fp_);
     }
 }
 
-int Log::GetLevel() {
+int Log::GetLevel() {   // 获取日志等级
     lock_guard<mutex> locker(mtx_);
     return level_;
 }
 
-void Log::SetLevel(int level) {
+void Log::SetLevel(int level) { // 设置日志等级
     lock_guard<mutex> locker(mtx_);
     level_ = level;
 }
 
-void Log::init(int level = 1, const char* path, const char* suffix,
+void Log::init(int level = 1, const char* path, const char* suffix,  // 初始化日志系统
     int maxQueueSize) {
         isOpen_ = true;
         level_ = level;
-        if (maxQueueSize > 0) {
+        if (maxQueueSize > 0) { // 如果设置了最大队列大小，使用异步写入
             isAsync_ = true;
             if (!deque_) {
                 unique_ptr<BlockDeque<std::string>> newDeque(new BlockDeque<std::string>);
@@ -51,7 +51,7 @@ void Log::init(int level = 1, const char* path, const char* suffix,
             }
         }
         else {
-            isAsync_ = false;
+            isAsync_ = false;    // 否则使用同步写入
         }
 
         linecount_ = 0;
@@ -81,13 +81,13 @@ void Log::init(int level = 1, const char* path, const char* suffix,
             }
             assert(fp_ != nullptr);
         }
-    }
+}
 
 void Log::write(int level, const char* format, ...) {
     struct timeval now = {0, 0};
     gettimeofday(&now, nullptr);
     time_t tSec = now.tv_sec;
-    struct tm *sysTime = localtime(&tSec);
+    struct tm *sysTime = localtime(&tSec);  // 获取当前时间
     struct tm t = *sysTime;
     va_list vaList;
 
@@ -163,24 +163,24 @@ void Log::AppendLogLevelTitle_(int level) {
 
 void Log::flush() {
     if (isAsync_) {
-        deque_->flush();
+        deque_->flush();     // 如果是异步，刷新队列
     }
-    fflush(fp_);
+    fflush(fp_);    // 刷新文件缓冲区
 }
 
-void Log::AsynWrite_() {
+void Log::AsynWrite_() {     // 异步写入处理
     string str = "";
     while (deque_->pop(str)) {
         lock_guard<mutex> locker(mtx_);
-        fputs(str.c_str(), fp_);
+        fputs(str.c_str(), fp_);    // 将字符串写入文件
     }
 }
 
-Log* Log::Instance() {
+Log* Log::Instance() {   // 获取 Log 类的单例
     static Log inst;
     return &inst;
 }
 
-void Log::FlushLogThread() {
+void Log::FlushLogThread() {    // 日志刷新线程函数
     Log::Instance()->AsynWrite_();
 }

@@ -13,19 +13,19 @@ public:
         assert(threadCount > 0);
         for (size_t i = 0; i < threadCount; i++) {
             std::thread([pool = pool_] {
-                std::unique_lock<std::mutex> locker(pool->mtx);
+                std::unique_lock<std::mutex> locker(pool->mtx); //加锁
                 while (true) {
                     if (!pool->tasks.empty()) {
                         auto task = std::move(pool->tasks.front());
                         pool->tasks.pop();
-                        locker.unlock();
+                        locker.unlock();    //处理任务期间，不需要持有锁
                         task();
-                        locker.lock();
+                        locker.lock();      //处理完任务，重新尝试加锁
                     }
-                    else if (pool->isClosed) break;
-                    else pool->cond.wait(locker);
+                    else if (pool->isClosed) break; // 如果线程池关闭，退出循环
+                    else pool->cond.wait(locker);   
                 }
-            }).detach();
+            }).detach();        // 线程与 ThreadPool 对象分离
         }
     }
 
@@ -44,7 +44,7 @@ public:
       
     }
 
-    template<class F>
+    template<class F>       // 添加任务到线程池
     void AddTask(F && task) {
         {//限制locker的作用域，离开立即释放
             std::lock_guard<std::mutex> locker(pool_->mtx);
@@ -54,11 +54,11 @@ public:
     }
 private:
     struct Pool {
-        std::mutex mtx;
-        std::condition_variable cond;
-        bool isClosed;
-        std::queue<std::function<void()>> tasks;
+        std::mutex mtx;                 // 互斥锁
+        std::condition_variable cond;   // 条件变量
+        bool isClosed;                  // 线程池是否关闭
+        std::queue<std::function<void()>> tasks;    // 任务队列
     };
-    std::shared_ptr<Pool> pool_;
+    std::shared_ptr<Pool> pool_;        // 指向 Pool 的共享指针
 };
 #endif

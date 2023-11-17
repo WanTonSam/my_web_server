@@ -20,11 +20,11 @@ typedef std::chrono::milliseconds MS;
 typedef Clock::time_point TimeStamp;
 
 struct TimerNode {
-    int id;
-    TimeStamp expires;
-    TimeoutCallBack cb;
+    int id;             // 定时器的唯一标识符
+    TimeStamp expires;  // 定时器的到期时间
+    TimeoutCallBack cb; // 到期时的回调函数
     bool operator < (const TimerNode& t) {
-        return expires < t.expires;
+        return expires < t.expires; // 定义小于运算符，以到期时间为比较基准
     }
 };
 
@@ -33,32 +33,32 @@ public:
     HeapTimer() { heap_.reserve(64); }
     ~HeapTimer() { clear(); }
 
-    void adjust(int id, int newExpires);
+    void adjust(int id, int newExpires);    // 调整定时器的到期时间
     
-    void add(int id, int timeouto, const TimeoutCallBack& cb);
+    void add(int id, int timeouto, const TimeoutCallBack& cb);// 添加定时器
 
-    void doWork(int id);
+    void doWork(int id);            // 执行指定id的定时器的回调函数
 
-    void clear();
+    void clear();                   // 清除所有定时器
 
-    void tick();
+    void tick();                    // 处理所有到期的定时器任务
 
-    void pop();
+    void pop();                     // 移除堆顶定时器
 
-    int GetNextTick();
+    int GetNextTick();              // 获取距离下一次定时任务的时间
 
 private:
-    void del_(size_t i);
+    void del_(size_t i);            // 删除指定位置的定时器
 
-    void siftup_(size_t i);
+    void siftup_(size_t i);         // 向上调整堆
 
-    bool siftdown_(size_t index, size_t n);
+    bool siftdown_(size_t index, size_t n); // 向下调整堆
 
-    void SwapNode_(size_t i, size_t j);
+    void SwapNode_(size_t i, size_t j);     // 交换堆中的两个节点
 
-    std::vector<TimerNode> heap_;
+    std::vector<TimerNode> heap_;           // 存储定时器的最小堆
 
-    std::unordered_map<int, size_t> ref_;
+    std::unordered_map<int, size_t> ref_;   // id到堆索引的映射
 };
 
 #endif

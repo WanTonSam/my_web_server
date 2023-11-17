@@ -9,26 +9,26 @@ const unordered_map<string, int> HttpRequest::DEFAULT_HTML_TAG {
 
 void HttpRequest::Init() {
     method_ = path_ = version_ = body_ = "";
-    state_ = REQUEST_LINE;
-    header_.clear();
-    post_.clear();
+    state_ = REQUEST_LINE;  // 设置初始解析状态为请求行
+    header_.clear();        // 清空头部字段映射
+    post_.clear();          // 清空 POST 字段映射
 }
 
-bool HttpRequest::IsKeepAlive() const {
+bool HttpRequest::IsKeepAlive() const {     //判断连接是否保持活跃
     if (header_.count("Connection") == 1) {
-        return header_.find("Connection")->second == "keep-alive" && version_ == "1.1";
+        return header_.find("Connection")->second == "keep-alive" && version_ == "1.1";// 如果存在 "Connection" 字段且版本为 1.1，则保持连接
     }
     return false;
 }
 
 bool HttpRequest::parse(Buffer& buff) {
-    const char CRLF[] = "\r\n";
+    const char CRLF[] = "\r\n";          // 搜索换行符，用于分割HTTP请求的各个部分
     if (buff.ReadableBytes() <= 0) {
         return false;
     }
     while (buff.ReadableBytes() && state_ != FINISH) {
         const char* lineEnd = search(buff.Peek(), buff.BeginWriteConst(), CRLF, CRLF +  2);
-        std::string line(buff.Peek(), lineEnd);
+        std::string line(buff.Peek(), lineEnd);     // 从缓冲区获取一行数据
         switch (state_)
         {
             case REQUEST_LINE:
@@ -49,35 +49,35 @@ bool HttpRequest::parse(Buffer& buff) {
             default:
                 break;
         }
-        if (lineEnd == buff.BeginWrite()) { break; }
-        buff.RetrieveUntil(lineEnd + 2);
+        if (lineEnd == buff.BeginWrite()) { break; }        // 判断是否已读取完所有数据
+        buff.RetrieveUntil(lineEnd + 2);                    // 从缓冲区移除已解析的数据
     }
     LOG_DEBUG("[%s], [%s], [%s]", method_.c_str(), path_.c_str(), version_.c_str());
     return true;
 }
 
 void HttpRequest::ParsePath_() {
-    if (path_ == "/") {
+    if (path_ == "/") {      // 如果路径是根路径
         path_ = "/index.html";
     }
     else {
-        for (auto &item : DEFAULT_HTML) {
+        for (auto &item : DEFAULT_HTML) {    // 遍历预设的HTML路径
             if (item == path_) {
-                path_ += ".html";
+                path_ += ".html";   // 添加html后缀
                 break;
             }
         }
     }
 }
 
-bool HttpRequest::ParseRequestLine_(const string& line) {
-    regex patten("^([^ ]*) ([^ ]*) HTTP/([^ ]*)$");
-    smatch subMatch;
-    if (regex_match(line, subMatch, patten)) {
-        method_ = subMatch[1];
-        path_ = subMatch[2];
-        version_ = subMatch[3];
-        state_ = HEADERS;
+bool HttpRequest::ParseRequestLine_(const string& line) {   // 解析请求行
+    regex patten("^([^ ]*) ([^ ]*) HTTP/([^ ]*)$");     // 使用正则表达式解析请求行
+    smatch subMatch;    // 存储正则匹配结果
+    if (regex_match(line, subMatch, patten)) {  // 如果匹配成功
+        method_ = subMatch[1];  // 设置请求方法
+        path_ = subMatch[2];    // 设置请求路径
+        version_ = subMatch[3]; // 设置HTTP版本
+        state_ = HEADERS;       // 更改解析状态为头部解析
         return true;
     }
     LOG_ERROR("RequestLine error");
@@ -88,35 +88,35 @@ void HttpRequest::ParseHeader_(const string& line) {
     regex patten("^([^:]*): ?(.*)$");
     smatch subMatch;
     if (regex_match(line, subMatch, patten)) {
-        header_[subMatch[1]] = subMatch[2];
+        header_[subMatch[1]] = subMatch[2]; // 存储头部键值对
     }
     else {
-        state_ = BODY;
+        state_ = BODY;  // 更改解析状态为正文解析
     }
 }
 
 void HttpRequest::ParseBody_(const string& line) {
-    body_ = line;
-    ParsePost_();
-    state_ = FINISH;
+    body_ = line;    // 设置正文内容
+    ParsePost_();   // 解析 POST 请求
+    state_ = FINISH;    // 更改解析状态为解析完成
     LOG_DEBUG("Body:%s, len:%d", line.c_str(), line.size());
 }
 
-int HttpRequest::ConverHex(char ch)  {
-    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
-    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+int HttpRequest::ConverHex(char ch)  {  // 将字符转换为十六进制的方法
+    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;   // 处理大写字母
+    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;   // 处理小写字母
     return ch;
 }
-
-void HttpRequest::ParsePost_() {
-    if (method_ == "POST" && header_["Content-Type"] == "application/x-www-form-urlencoded") {
-        ParseFromUrlencode_();
-        if (DEFAULT_HTML_TAG.count(path_)) {
-            int tag = DEFAULT_HTML_TAG.find(path_)->second;
+    
+void HttpRequest::ParsePost_() {            // 解析 POST 请求
+    if (method_ == "POST" && header_["Content-Type"] == "application/x-www-form-urlencoded") {// 如果是 POST 请求且内容类型为 application/x-www-form-urlencoded
+        ParseFromUrlencode_();  // 解析 URL 编码的 POST 数据
+        if (DEFAULT_HTML_TAG.count(path_)) {    // 如果路径在 HTML 标签映射中
+            int tag = DEFAULT_HTML_TAG.find(path_)->second; // 获取 HTML 标签
             LOG_DEBUG("Tag:%d", tag);
             if (tag == 0 || tag == 1) {
-                bool isLogin = (tag == 1);
-                if (UserVerify(post_["username"], post_["password"], isLogin)) {
+                bool isLogin = (tag == 1);   // 判断是否为登录操作
+                if (UserVerify(post_["username"], post_["password"], isLogin)) {    // 验证用户
                     path_ = "/welcome.html";
                 }
                 else {
@@ -127,18 +127,22 @@ void HttpRequest::ParsePost_() {
     }
 }
 
-void HttpRequest::ParseFromUrlencode_() {
+void HttpRequest::ParseFromUrlencode_() {    // 解析 URL 编码
     if (body_.size() == 0) { return; }
 
-    string key, value;
+    string key, value;  // 存储键值对
     int num = 0;
-    int n = body_.size();
-    int i = 0, j = 0;
+    int n = body_.size();    // 正文长度
+    int i = 0, j = 0;       // 迭代器
+                                    /*  POST http://www.example.com HTTP/1.1    
+                                        Content-Type:application/x-www-form-urlencoded;charset=utf-8
+                                        title=test&sub%5B%5D=1&sub%5B%5D=2&sub%5B%5D=3 */
+
     for (; i < n; i++) {
-        char ch = body_[i];
-        switch (ch) {
+        char ch = body_[i]; // 获取字符
+        switch (ch) {   // 根据字符进行不同处理
             case '=':
-                key = body_.substr(j, i - j);
+                key = body_.substr(j, i - j);       
                 j = i + 1;
                 break;
             case '+':
@@ -156,7 +160,7 @@ void HttpRequest::ParseFromUrlencode_() {
                 post_[key] = value;
                 LOG_DEBUG("%s = %s", key.c_str(), value.c_str());
                 break;
-            default :
+            default :  
                 break;
         }
     }
