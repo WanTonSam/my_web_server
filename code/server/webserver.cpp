@@ -10,18 +10,18 @@ WebServer::WebServer(
     port_(port), openLinger_(OptLinger), timeoutMS_(timeoutMS), isClose_(false),
     timer_(new HeapTimer()), threadpool_(new ThreadPool(threadNum)), epoller_(new Epoller())
     {
-        srcDir_ = getcwd(nullptr, 256);
+        srcDir_ = getcwd(nullptr, 256); // 获取当前工作目录
         assert(srcDir_);
-        strncat(srcDir_, "/resources/", 16);
-        HttpConn::userCount = 0;
+        strncat(srcDir_, "/resources/", 16);    //设置资源目录
+        HttpConn::userCount = 0;                // 初始化Http连接的静态成员
         HttpConn::srcDir = srcDir_;
-        SqlConnPool::Instance()->Init("localhost", sqlPort, sqlUser, sqlPwd, dbName, connPoolNum);
+        SqlConnPool::Instance()->Init("localhost", sqlPort, sqlUser, sqlPwd, dbName, connPoolNum);  // 初始化SQL连接池
 
-        InitEventMode_(trigMode);
-        if (!InitSocket_()){isClose_ = true;}
+        InitEventMode_(trigMode);               // 初始化事件模式
+        if (!InitSocket_()){isClose_ = true;}   // 初始化套接字，失败则设置关闭标志
 
         if (openLog){
-            Log::Instance()->init(logLevel, "./log", ".log", logQuesize);
+            Log::Instance()->init(logLevel, "./log", ".log", logQuesize);   // 日志系统初始化
             if (isClose_) {LOG_ERROR("==================== Server init error ==================");}
             else {
                 LOG_INFO("========= Server init ==============");
@@ -37,27 +37,27 @@ WebServer::WebServer(
 }
 
 WebServer::~WebServer() {
-    close(listenFd_);
+    close(listenFd_);    // 关闭监听文件描述符
     isClose_ = true;
-    free(srcDir_);
-    SqlConnPool::Instance()->ClosePool();
+    free(srcDir_);       // 释放资源目录路径
+    SqlConnPool::Instance()->ClosePool();   // 关闭SQL连接池
 }
 
 void WebServer::InitEventMode_(int trigMode) {
-    listenEvent_  = EPOLLRDHUP;
-    connEvent_ = EPOLLONESHOT | EPOLLRDHUP;
-    switch (trigMode)
+    listenEvent_  = EPOLLRDHUP;             // 设置监听事件
+    connEvent_ = EPOLLONESHOT | EPOLLRDHUP; // 设置连接事件
+    switch (trigMode)    // 根据传入的模式调整事件模式
     {
         case 0:
             break;
         case 1:
-            connEvent_ |= EPOLLET;
+            connEvent_ |= EPOLLET;      // 启用边缘触发模式
             break;
         case 2:
             listenEvent_ |= EPOLLET;
             break;
         case 3:
-            listenEvent_  |= EPOLLET;
+            listenEvent_  |= EPOLLET;   // 监听事件和连接事件都使用边缘触发
             connEvent_ |= EPOLLET;
             break;
         default :
@@ -66,23 +66,23 @@ void WebServer::InitEventMode_(int trigMode) {
             break;
     }
 
-    HttpConn::isET = (connEvent_ & EPOLLET);
+    HttpConn::isET = (connEvent_ & EPOLLET);    // 设置Http连接是否为边缘触发模式
 }
-void WebServer::Start() {
-    int timeMS = -1;
+void WebServer::Start() {       // 启动Web服务器
+    int timeMS = -1;            // epoll wait超时时间，-1表示无限等待
     if (!isClose_) {LOG_INFO("============ Server start =============="); }
     while (!isClose_) {
         if (timeoutMS_ > 0) {
-            timeMS = timer_->GetNextTick();
+            timeMS = timer_->GetNextTick();     // 获取下一个定时事件的时间
         }
-        int eventCnt = epoller_->Wait(timeMS);
-        for (int i = 0; i < eventCnt; i++) {
-            int fd = epoller_->GetEventFd(i);
-            uint32_t events = epoller_->GetEvents(i);
+        int eventCnt = epoller_->Wait(timeMS);  // 等待事件
+        for (int i = 0; i < eventCnt; i++) {    // 处理每一个事件
+            int fd = epoller_->GetEventFd(i);   // 获取文件描述符
+            uint32_t events = epoller_->GetEvents(i);   // 获取事件类型
             if (fd == listenFd_) {
-                DealListen_();
+                DealListen_();                  // 处理监听事件
             }
-            else if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
+            else if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {  // 处理异常事件
                 assert(users_.count(fd) > 0);
                 CloseConn_(&users_[fd]);
             }
@@ -110,59 +110,59 @@ void WebServer::SendError_(int fd, const char* info) {
     close(fd);
 }
 
-void WebServer::CloseConn_(HttpConn* client) {
+void WebServer::CloseConn_(HttpConn* client) {      // 关闭连接
     assert(client);
     LOG_INFO("Client[%d] quit!", client->GetFd());
     epoller_->DelFd(client->GetFd());
-    client->Close();
+    client->Close();             // 关闭客户端连接
 }
 
-void WebServer::AddClient_(int fd, sockaddr_in addr) {
+void WebServer::AddClient_(int fd, sockaddr_in addr) {      // 添加新的客户端
     assert(fd > 0);
     users_[fd].init(fd, addr);
-    if (timeoutMS_ > 0) {
+    if (timeoutMS_ > 0) {           // 如果设置了超时时间，则添加到定时器中
         timer_->add(fd, timeoutMS_, std::bind(&WebServer::CloseConn_, this, &users_[fd]));
     }
-    epoller_->AddFd(fd, EPOLLIN | connEvent_);
-    SetFdNonblock(fd);
+    epoller_->AddFd(fd, EPOLLIN | connEvent_);  // 将文件描述符添加到epoll中，并设置为非阻塞模式
+    SetFdNonblock(fd);                          // 设置文件描述符为非阻塞
     LOG_INFO("Client[%d] in!", users_[fd].GetFd());
 }
 
-void WebServer::DealListen_() {
+void WebServer::DealListen_() {     // 处理监听事件
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
     do {
         int fd = accept(listenFd_, (struct sockaddr *)&addr, &len);
         if (fd <= 0) { return ;}
-        else if (HttpConn::userCount >= MAX_FD) {
+        else if (HttpConn::userCount >= MAX_FD) {   // 客户端数量超过最大值
             SendError_(fd, "Server busy!");
             LOG_WARN("Client is full!");
             return;
         }
-        AddClient_(fd, addr);
-    } while (listenEvent_ & EPOLLET);
+        AddClient_(fd, addr);           // 添加新客户端
+    } while (listenEvent_ & EPOLLET);   // 如果是边缘触发模式，需要循环处理
 }
 
-void WebServer::DealRead_(HttpConn* client) {
+void WebServer::DealRead_(HttpConn* client) {       // 处理读事件
     assert(client);
-    ExtenTime_(client);
-    threadpool_->AddTask(std::bind(&WebServer::OnRead_, this, client));
+    ExtenTime_(client);                             // 延长客户端超时时间
+    threadpool_->AddTask(std::bind(&WebServer::OnRead_, this, client));  // 将读取任务添加到线程池
 }
 
-void WebServer::DealWrite_(HttpConn* client) {
+void WebServer::DealWrite_(HttpConn* client) {      // 处理写事件
     assert(client);
-    ExtenTime_(client);
-    threadpool_->AddTask(std::bind(&WebServer::OnWrite_, this, client));
+    ExtenTime_(client);                             // 延长客户端超时时间
+    threadpool_->AddTask(std::bind(&WebServer::OnWrite_, this, client));    // 将写入任务添加到线程池
 }
 
-void WebServer::ExtenTime_(HttpConn* client) {
+void WebServer::ExtenTime_(HttpConn* client) {      // 延长客户端超时时间
     assert(client);
     if (timeoutMS_ > 0) {
-        timer_->adjust(client->GetFd(), timeoutMS_);
+        timer_->adjust(client->GetFd(), timeoutMS_);      // 如果设置了超时时间，则调整定时器
     }
 }
 
-void WebServer::OnRead_(HttpConn* client) {
+void WebServer::OnRead_(HttpConn* client) {         // 处理读事件
     assert(client);
     int ret = -1;
     int readErrno = 0;
@@ -171,31 +171,31 @@ void WebServer::OnRead_(HttpConn* client) {
         CloseConn_(client);
         return;
     }
-    OnProcess(client);
+    OnProcess(client);      // 处理读取到的数据
 }
 
-void WebServer::OnProcess(HttpConn* client) {
-    if(client->process()) {
+void WebServer::OnProcess(HttpConn* client) {       // 处理客户端请求
+    if(client->process()) {                         // 如果处理成功，准备写回数据
         epoller_->ModFd(client->GetFd(), connEvent_ | EPOLLOUT);
     }
-    else {
+    else {      // 继续读取更多数据
         epoller_->ModFd(client->GetFd(), connEvent_ | EPOLLIN);
     }
 }
 
-void WebServer::OnWrite_(HttpConn* client) {
+void WebServer::OnWrite_(HttpConn* client) {        // 处理写事件
     assert(client);
     int ret = -1;
     int writeErrono = 0;
-    ret = client->write(&writeErrono);
-    if (client->ToWriteBytes() == 0) {
-        if (client->IsKeepAlive()) {
+    ret = client->write(&writeErrono);              // 执行写操作
+    if (client->ToWriteBytes() == 0) {              // 如果数据已经全部写入
+        if (client->IsKeepAlive()) {                // 如果是长连接，继续处理请求
             OnProcess(client);
             return;
         }
     }
     else if (ret < 0) {
-        if (writeErrono == EAGAIN) {
+        if (writeErrono == EAGAIN) {    //EAGAIN 是一个错误码，表示非阻塞操作无法立即完成,在这种情况下，意味着输出缓冲区已满，现在不能发送更多数据，稍后可以重试。
             epoller_->ModFd(client->GetFd(), connEvent_ | EPOLLOUT);
             return;
         }
@@ -210,21 +210,21 @@ bool WebServer::InitSocket_() {
         LOG_ERROR("Port:%d error!", port_);
         return false;
     }
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(port_);
+    addr.sin_family = AF_INET;                  // 设置地址族
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);   // 接受任何地址
+    addr.sin_port = htons(port_);               // 设置端口号
     struct linger optLinger = { 0 };
-    if (openLinger_) {
+    if (openLinger_) {                          // 设置优雅关闭选项
         optLinger.l_onoff = 1;
         optLinger.l_linger = 1;
     }
-    listenFd_ = socket(AF_INET, SOCK_STREAM, 0);
+    listenFd_ = socket(AF_INET, SOCK_STREAM, 0);    // 创建套接字
     if (listenFd_ < 0) {
         LOG_ERROR("Creat socket error!", port_);
         return false;
     }
 
-    ret = setsockopt(listenFd_, SOL_SOCKET, SO_LINGER, &optLinger, sizeof(optLinger));
+    ret = setsockopt(listenFd_, SOL_SOCKET, SO_LINGER, &optLinger, sizeof(optLinger));  // 设置linger选项
     if (ret < 0) {
         close(listenFd_);
         LOG_ERROR("Init linger error!", port_);
@@ -232,7 +232,7 @@ bool WebServer::InitSocket_() {
     }
 
     int optval = 1;
-    ret = setsockopt(listenFd_, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int));
+    ret = setsockopt(listenFd_, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int));    // 设置socket选项SO_REUSEADDR，允许重用本地地址和端口
     if (ret == -1) {
         LOG_ERROR("set socket setsocketopt error !");
         close(listenFd_);
@@ -253,7 +253,7 @@ bool WebServer::InitSocket_() {
         return false;
     }
 
-    ret = epoller_->AddFd(listenFd_, listenEvent_ | EPOLLIN);
+    ret = epoller_->AddFd(listenFd_, listenEvent_ | EPOLLIN);   // 将监听的文件描述符添加到epoll事件监听中
     if (ret == 0) {
         LOG_ERROR("Add listen error!");
         close(listenFd_);
@@ -265,7 +265,7 @@ bool WebServer::InitSocket_() {
     return true;
 }
 
-int WebServer::SetFdNonblock(int fd) {
+int WebServer::SetFdNonblock(int fd) {  // 设置文件描述符为非阻塞模式
     assert(fd > 0);
     return fcntl(fd, F_SETFL,fcntl(fd, F_GETFD, 0) | O_NONBLOCK);
 }

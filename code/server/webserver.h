@@ -48,19 +48,19 @@ private:
 
     static  int SetFdNonblock(int fd);
 
-    int port_;
-    bool openLinger_;
-    int timeoutMS_;
-    bool isClose_;
-    int listenFd_;
-    char* srcDir_;
-    uint32_t listenEvent_;
-    uint32_t connEvent_;
+    int port_;               // 服务器端口
+    bool openLinger_;       // 是否开启linger选项
+    int timeoutMS_;         // 超时时间（毫秒）
+    bool isClose_;          // 服务器是否关闭的标志
+    int listenFd_;          // 监听文件描述符
+    char* srcDir_;          // 资源目录
+    uint32_t listenEvent_;  // 监听事件类型
+    uint32_t connEvent_;    // 连接事件类型
 
-    std::unique_ptr<HeapTimer> timer_;
-    std::unique_ptr<ThreadPool> threadpool_;
-    std::unique_ptr<Epoller>  epoller_;
-    std::unordered_map<int, HttpConn> users_;
+    std::unique_ptr<HeapTimer> timer_;          // 定时器
+    std::unique_ptr<ThreadPool> threadpool_;    // 线程池
+    std::unique_ptr<Epoller>  epoller_;         // Epoller对象
+    std::unordered_map<int, HttpConn> users_;   // 存储客户端连接的map
 };
 
 #endif
